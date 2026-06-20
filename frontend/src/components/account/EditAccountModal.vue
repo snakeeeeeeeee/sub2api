@@ -1319,6 +1319,8 @@
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
+      <UpstreamHeadersEditor v-model="upstreamHeaders" />
+
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <input v-model="expiresAtInput" type="datetime-local" class="input" />
@@ -2398,6 +2400,7 @@ import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
+import UpstreamHeadersEditor from '@/components/account/UpstreamHeadersEditor.vue'
 import { applyInterceptWarmup } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
@@ -2537,6 +2540,7 @@ const antigravityModelMappings = ref<ModelMapping[]>([])
 const isSyncingAntigravityUpstream = ref(false)
 const tempUnschedEnabled = ref(false)
 const tempUnschedRules = ref<TempUnschedRuleForm[]>([])
+const upstreamHeaders = ref<Record<string, string>>({})
 const getModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-model-mapping')
 const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-openai-compact-model-mapping')
 const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-antigravity-model-mapping')
@@ -2767,6 +2771,32 @@ const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) =
   }
   credentials.openai_capabilities = capabilities
 }
+const readUpstreamHeaders = (extra?: Record<string, unknown>): Record<string, string> => {
+  const raw = extra?.upstream_headers
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {}
+  }
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([name, value]) => name.trim() && typeof value === 'string')
+      .map(([name, value]) => [name, value as string])
+  )
+}
+
+const applyUpstreamHeadersToExtra = (base?: Record<string, unknown>): Record<string, unknown> | undefined => {
+  const extra: Record<string, unknown> = { ...(base || {}) }
+  const headers = Object.fromEntries(
+    Object.entries(upstreamHeaders.value)
+      .map(([name, value]) => [name.trim(), value])
+      .filter(([name]) => name)
+  )
+  if (Object.keys(headers).length > 0) {
+    extra.upstream_headers = headers
+  } else {
+    delete extra.upstream_headers
+  }
+  return Object.keys(extra).length > 0 ? extra : undefined
+}
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
     return mode
@@ -2945,6 +2975,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedScheduling.value = false
   allowOverages.value = false
 	const extra = newAccount.extra as Record<string, unknown> | undefined
+  upstreamHeaders.value = readUpstreamHeaders(extra)
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
@@ -4205,6 +4236,11 @@ const handleSubmit = async () => {
       writeQuotaNotifyToExtra(newExtra, 'update')
       updatePayload.extra = newExtra
     }
+
+    updatePayload.extra = applyUpstreamHeadersToExtra(
+      (updatePayload.extra as Record<string, unknown> | undefined) ||
+        (props.account.extra as Record<string, unknown> | undefined)
+    )
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
       await submitUpdateAccount(accountID, updatePayload)

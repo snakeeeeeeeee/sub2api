@@ -2752,6 +2752,8 @@
         </div>
       </div>
 
+      <UpstreamHeadersEditor v-model="upstreamHeaders" />
+
       <div>
         <div class="flex items-center justify-between">
           <div>
@@ -3238,6 +3240,7 @@ import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
+import UpstreamHeadersEditor from '@/components/account/UpstreamHeadersEditor.vue'
 import { applyInterceptWarmup } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
@@ -3470,6 +3473,7 @@ const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMapping
 const getTempUnschedRuleKey = createStableObjectKeyResolver<TempUnschedRuleForm>('create-temp-unsched-rule')
 const geminiOAuthType = ref<'code_assist' | 'google_one' | 'ai_studio'>('google_one')
 const geminiAIStudioOAuthEnabled = ref(false)
+const upstreamHeaders = ref<Record<string, string>>({})
 const openAICompactModeOptions = computed(() => [
   { value: 'auto', label: t('admin.accounts.openai.compactModeAuto') },
   { value: 'force_on', label: t('admin.accounts.openai.compactModeForceOn') },
@@ -3533,11 +3537,26 @@ const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) =
   credentials.openai_capabilities = capabilities
 }
 
+const buildAccountExtra = (base?: Record<string, unknown>): Record<string, unknown> | undefined => {
+  const extra: Record<string, unknown> = { ...(base || {}) }
+  const headers = Object.fromEntries(
+    Object.entries(upstreamHeaders.value)
+      .map(([name, value]) => [name.trim(), value])
+      .filter(([name]) => name)
+  )
+  if (Object.keys(headers).length > 0) {
+    extra.upstream_headers = headers
+  } else {
+    delete extra.upstream_headers
+  }
+  return Object.keys(extra).length > 0 ? extra : undefined
+}
+
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {}
   if (mixedScheduling.value) extra.mixed_scheduling = true
   if (allowOverages.value) extra.allow_overages = true
-  return Object.keys(extra).length > 0 ? extra : undefined
+  return buildAccountExtra(extra)
 }
 
 const buildOpenAICompactModelMapping = () =>
@@ -4279,6 +4298,7 @@ const resetForm = () => {
   vertexLocation.value = 'global'
   tempUnschedEnabled.value = false
   tempUnschedRules.value = []
+  upstreamHeaders.value = {}
   geminiOAuthType.value = 'code_assist'
   geminiTierGoogleOne.value = 'google_one_free'
   geminiTierGcp.value = 'gcp_standard'
@@ -4300,7 +4320,7 @@ const handleClose = () => {
 
 const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknown> | undefined => {
   if (form.platform !== 'openai') {
-    return base
+    return buildAccountExtra(base)
   }
 
   const extra: Record<string, unknown> = { ...(base || {}) }
@@ -4351,12 +4371,12 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     delete extra.openai_responses_mode
   }
 
-  return Object.keys(extra).length > 0 ? extra : undefined
+  return buildAccountExtra(extra)
 }
 
 const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unknown> | undefined => {
   if (form.platform !== 'anthropic' || accountCategory.value !== 'apikey') {
-    return base
+    return buildAccountExtra(base)
   }
 
   const extra: Record<string, unknown> = { ...(base || {}) }
@@ -4371,7 +4391,7 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
     extra.web_search_emulation = webSearchEmulationMode.value
   }
 
-  return Object.keys(extra).length > 0 ? extra : undefined
+  return buildAccountExtra(extra)
 }
 
 // Helper function to create account with mixed channel warning handling
@@ -4540,7 +4560,7 @@ const handleSubmit = async () => {
 
     applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
 
-    await createAccountAndFinish('anthropic', 'bedrock' as AccountType, credentials)
+    await createAccountAndFinish('anthropic', 'bedrock' as AccountType, credentials, buildAccountExtra())
     return
   }
 
@@ -4601,7 +4621,7 @@ const handleSubmit = async () => {
       location: vertexLocation.value.trim(),
       tier_id: 'vertex'
     }
-    await createAccountAndFinish(form.platform, 'service_account' as AccountType, credentials)
+    await createAccountAndFinish(form.platform, 'service_account' as AccountType, credentials, buildAccountExtra())
     return
   }
 
@@ -4727,9 +4747,9 @@ const createAccountAndFinish = async (
     return
   }
   // Inject quota limits for apikey/bedrock accounts
-  let finalExtra = extra
+  let finalExtra = buildAccountExtra(extra)
   if (type === 'apikey' || type === 'bedrock') {
-    const quotaExtra: Record<string, unknown> = { ...(extra || {}) }
+    const quotaExtra: Record<string, unknown> = { ...(finalExtra || {}) }
     if (editQuotaLimit.value != null && editQuotaLimit.value > 0) {
       quotaExtra.quota_limit = editQuotaLimit.value
     }
@@ -4755,7 +4775,7 @@ const createAccountAndFinish = async (
     // Quota notify config
     writeQuotaNotifyToExtra(quotaExtra, 'create')
     if (Object.keys(quotaExtra).length > 0) {
-      finalExtra = quotaExtra
+      finalExtra = buildAccountExtra(quotaExtra)
     }
   }
   if (platform === 'openai') {
@@ -4842,7 +4862,7 @@ const handleOpenAIExchange = async (authCode: string) => {
         platform: 'openai',
         type: 'oauth',
         credentials,
-        extra,
+        extra: buildAccountExtra(extra),
         proxy_id: form.proxy_id,
         concurrency: form.concurrency,
         load_factor: form.load_factor ?? undefined,
@@ -5046,7 +5066,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
             platform: 'openai',
             type: 'oauth',
             credentials,
-            extra,
+            extra: buildAccountExtra(extra),
             proxy_id: form.proxy_id,
             concurrency: form.concurrency,
             load_factor: form.load_factor ?? undefined,
@@ -5144,7 +5164,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           platform: 'antigravity',
           type: 'oauth',
           credentials,
-          extra: {},
+          extra: buildAccountExtra() || {},
           proxy_id: form.proxy_id,
           concurrency: form.concurrency,
           load_factor: form.load_factor ?? undefined,
@@ -5485,7 +5505,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           platform: form.platform,
           type: addMethod.value, // Use addMethod as type: 'oauth' or 'setup-token'
           credentials,
-          extra,
+          extra: buildAccountExtra(extra),
           proxy_id: form.proxy_id,
           concurrency: form.concurrency,
           load_factor: form.load_factor ?? undefined,

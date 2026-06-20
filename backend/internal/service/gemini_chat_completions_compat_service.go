@@ -105,9 +105,11 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	}
 
 	buildReq, requestIDHeader := s.buildGeminiChatCompletionsUpstreamRequestFunc(
+		c,
 		account,
 		mappedModel,
 		geminiReq,
+		originalChatBody,
 		clientStream,
 		useUpstreamStream,
 	)
@@ -288,9 +290,11 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 }
 
 func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestFunc(
+	c *gin.Context,
 	account *Account,
 	mappedModel string,
 	geminiReq []byte,
+	originalChatBody []byte,
 	clientStream bool,
 	useUpstreamStream bool,
 ) (func(context.Context) (*http.Request, string, error), string) {
@@ -324,6 +328,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 			}
 			upstreamReq.Header.Set("Content-Type", "application/json")
 			upstreamReq.Header.Set("x-goog-api-key", apiKey)
+			ApplyAccountUpstreamHeaders(upstreamReq, c, account, originalChatBody)
 			return upstreamReq, "x-request-id", nil
 		}, "x-request-id"
 
@@ -370,6 +375,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 				upstreamReq.Header.Set("Content-Type", "application/json")
 				upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
 				upstreamReq.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+				ApplyAccountUpstreamHeaders(upstreamReq, c, account, originalChatBody)
 				return upstreamReq, "x-request-id", nil
 			}
 
@@ -391,6 +397,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 			}
 			upstreamReq.Header.Set("Content-Type", "application/json")
 			upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
+			ApplyAccountUpstreamHeaders(upstreamReq, c, account, originalChatBody)
 			return upstreamReq, "x-request-id", nil
 		}, "x-request-id"
 
@@ -420,6 +427,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 			}
 			upstreamReq.Header.Set("Content-Type", "application/json")
 			upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
+			ApplyAccountUpstreamHeaders(upstreamReq, c, account, originalChatBody)
 			return upstreamReq, "x-request-id", nil
 		}, "x-request-id"
 

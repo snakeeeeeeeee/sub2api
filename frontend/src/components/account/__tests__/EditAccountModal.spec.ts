@@ -310,6 +310,58 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_responses_supported).toBe(true)
   })
 
+  it('renders and submits account-level upstream header templates in extra', async () => {
+    const account = buildAccount()
+    account.extra = {
+      upstream_headers: {
+        'X-Pool-Session-ID': '{{header.session-id}}'
+      }
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    expect(wrapper.get('[data-testid="upstream-header-name"]').element).toHaveProperty(
+      'value',
+      'X-Pool-Session-ID'
+    )
+    expect(wrapper.get('[data-testid="upstream-header-value"]').element).toHaveProperty(
+      'value',
+      '{{header.session-id}}'
+    )
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.upstream_headers).toEqual({
+      'X-Pool-Session-ID': '{{header.session-id}}'
+    })
+  })
+
+  it('removes account-level upstream header templates from extra when the last row is deleted', async () => {
+    const account = buildAccount()
+    account.extra = {
+      upstream_headers: {
+        'X-Pool-Session-ID': '{{header.session-id}}'
+      }
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="upstream-header-remove"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('upstream_headers')
+  })
+
   it('submits OpenAI APIKey endpoint capabilities from credentials', async () => {
     const account = buildAccount()
     account.credentials.openai_capabilities = ['chat_completions']

@@ -224,6 +224,63 @@ func TestForwardAsRawChatCompletions_PreservesDeepSeekReasoningContentInRequest(
 	require.Equal(t, "get_weather", gjson.GetBytes(upstream.lastBody, "messages.1.tool_calls.0.function.name").String())
 }
 
+func TestForwardAsRawChatCompletions_AppliesAccountUpstreamHeaderTemplates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-test","messages":[{"role":"user","content":"hello"}],"metadata":{"tenant_id":"tenant-raw","nested":{"ok":true}},"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions?trace_id=trace-raw", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Session-ID", "session-raw")
+	c.Request.Header.Set("X-NewAPI-Meta", `{"user":{"id":"user-raw"}}`)
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_raw_headers"}},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"chatcmpl_headers","object":"chat.completion","model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)),
+	}}
+
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+	account := rawChatCompletionsTestAccount()
+	account.Extra = map[string]any{
+		"routing": map[string]any{"pool": map[string]any{"name": "pool-raw"}},
+		accountUpstreamHeadersExtraKey: map[string]any{
+			"X-Pool-Session-ID": "{{header.session-id}}",
+			"X-Tenant-ID":       "{{body.metadata.tenant_id}}",
+			"X-Trace-ID":        "{{query.trace_id}}",
+			"X-User-ID":         "{{json_header.x-newapi-meta:user.id}}",
+			"X-Account-ID":      "{{account.id}}",
+			"X-Extra-Pool":      "{{account.extra.routing.pool.name}}",
+			"X-Body-Object":     "{{body.metadata}}",
+			"X-Missing":         "{{header.missing}}",
+			"Authorization":     "Bearer should-not-override",
+			"Content-Type":      "text/plain",
+			"X-Bad-CRLF":        "bad\nvalue",
+		},
+	}
+
+	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, account, body, "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "session-raw", upstream.lastReq.Header.Get("X-Pool-Session-ID"))
+	require.Equal(t, "tenant-raw", upstream.lastReq.Header.Get("X-Tenant-ID"))
+	require.Equal(t, "trace-raw", upstream.lastReq.Header.Get("X-Trace-ID"))
+	require.Equal(t, "user-raw", upstream.lastReq.Header.Get("X-User-ID"))
+	require.Equal(t, "101", upstream.lastReq.Header.Get("X-Account-ID"))
+	require.Equal(t, "pool-raw", upstream.lastReq.Header.Get("X-Extra-Pool"))
+	require.Equal(t, `{"tenant_id":"tenant-raw","nested":{"ok":true}}`, upstream.lastReq.Header.Get("X-Body-Object"))
+	require.Empty(t, upstream.lastReq.Header.Get("X-Missing"))
+	require.Empty(t, upstream.lastReq.Header.Get("X-Bad-CRLF"))
+	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
+	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Content-Type"))
+}
+
 func TestForwardAsRawChatCompletions_SilentRefusalTriggersFailover(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
