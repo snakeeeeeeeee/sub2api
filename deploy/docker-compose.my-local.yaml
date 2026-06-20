@@ -1,0 +1,166 @@
+# =============================================================================
+# Sub2API Docker Compose - Independent "my-" Instance
+# =============================================================================
+# This file starts a separate Sub2API stack and does not reuse the default
+# sub2api / sub2api-postgres / sub2api-redis containers or data directories.
+#
+# Quick start:
+#   1. Create an env file with the required secrets:
+#      MY_SUB2API_POSTGRES_PASSWORD=...
+#      MY_SUB2API_ADMIN_PASSWORD=...
+#      MY_SUB2API_JWT_SECRET=...
+#      MY_SUB2API_TOTP_ENCRYPTION_KEY=...
+#   2. mkdir -p my-data my-postgres-data my-redis-data
+#   3. docker compose --env-file .env.my-sub2api -f docker-compose.my-local.yaml up -d
+#   4. Access: http://SERVER_IP:28080
+# =============================================================================
+
+services:
+  my-sub2api:
+    image: ${MY_SUB2API_IMAGE:-ikun0x00/sub2api:latest}
+    container_name: my-sub2api
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    ports:
+      - "${MY_SUB2API_BIND_HOST:-0.0.0.0}:${MY_SUB2API_HOST_PORT:-28080}:8080"
+    volumes:
+      - ./my-data:/app/data
+      # Optional: mount a custom config file for this independent instance.
+      # - ./my-config.yaml:/app/data/config.yaml
+    environment:
+      - AUTO_SETUP=true
+      - SERVER_HOST=0.0.0.0
+      # Keep the container port at 8080. The host port is MY_SUB2API_HOST_PORT.
+      - SERVER_PORT=8080
+      - SERVER_MODE=${MY_SUB2API_SERVER_MODE:-release}
+      - RUN_MODE=${MY_SUB2API_RUN_MODE:-standard}
+
+      - DATABASE_HOST=my-sub2api-postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${MY_SUB2API_POSTGRES_USER:-my_sub2api}
+      - DATABASE_PASSWORD=${MY_SUB2API_POSTGRES_PASSWORD:?MY_SUB2API_POSTGRES_PASSWORD is required}
+      - DATABASE_DBNAME=${MY_SUB2API_POSTGRES_DB:-my_sub2api}
+      - DATABASE_SSLMODE=disable
+      - DATABASE_MAX_OPEN_CONNS=${MY_SUB2API_DATABASE_MAX_OPEN_CONNS:-50}
+      - DATABASE_MAX_IDLE_CONNS=${MY_SUB2API_DATABASE_MAX_IDLE_CONNS:-10}
+      - DATABASE_CONN_MAX_LIFETIME_MINUTES=${MY_SUB2API_DATABASE_CONN_MAX_LIFETIME_MINUTES:-30}
+      - DATABASE_CONN_MAX_IDLE_TIME_MINUTES=${MY_SUB2API_DATABASE_CONN_MAX_IDLE_TIME_MINUTES:-5}
+
+      - REDIS_HOST=my-sub2api-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${MY_SUB2API_REDIS_PASSWORD:-}
+      - REDIS_DB=${MY_SUB2API_REDIS_DB:-0}
+      - REDIS_POOL_SIZE=${MY_SUB2API_REDIS_POOL_SIZE:-1024}
+      - REDIS_MIN_IDLE_CONNS=${MY_SUB2API_REDIS_MIN_IDLE_CONNS:-10}
+      - REDIS_ENABLE_TLS=${MY_SUB2API_REDIS_ENABLE_TLS:-false}
+
+      - ADMIN_EMAIL=${MY_SUB2API_ADMIN_EMAIL:-admin@my-sub2api.local}
+      - ADMIN_PASSWORD=${MY_SUB2API_ADMIN_PASSWORD:?MY_SUB2API_ADMIN_PASSWORD is required}
+
+      - JWT_SECRET=${MY_SUB2API_JWT_SECRET:?MY_SUB2API_JWT_SECRET is required}
+      - JWT_EXPIRE_HOUR=${MY_SUB2API_JWT_EXPIRE_HOUR:-24}
+      - TOTP_ENCRYPTION_KEY=${MY_SUB2API_TOTP_ENCRYPTION_KEY:?MY_SUB2API_TOTP_ENCRYPTION_KEY is required}
+      - TZ=${MY_SUB2API_TZ:-Asia/Shanghai}
+
+      - GEMINI_OAUTH_CLIENT_ID=${MY_SUB2API_GEMINI_OAUTH_CLIENT_ID:-}
+      - GEMINI_OAUTH_CLIENT_SECRET=${MY_SUB2API_GEMINI_OAUTH_CLIENT_SECRET:-}
+      - GEMINI_OAUTH_SCOPES=${MY_SUB2API_GEMINI_OAUTH_SCOPES:-}
+      - GEMINI_QUOTA_POLICY=${MY_SUB2API_GEMINI_QUOTA_POLICY:-}
+      - GEMINI_CLI_OAUTH_CLIENT_SECRET=${MY_SUB2API_GEMINI_CLI_OAUTH_CLIENT_SECRET:-}
+      - ANTIGRAVITY_OAUTH_CLIENT_SECRET=${MY_SUB2API_ANTIGRAVITY_OAUTH_CLIENT_SECRET:-}
+      - ANTIGRAVITY_USER_AGENT_VERSION=${MY_SUB2API_ANTIGRAVITY_USER_AGENT_VERSION:-}
+
+      - SECURITY_URL_ALLOWLIST_ENABLED=${MY_SUB2API_SECURITY_URL_ALLOWLIST_ENABLED:-false}
+      - SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=${MY_SUB2API_SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP:-false}
+      - SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=${MY_SUB2API_SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS:-false}
+      - SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS=${MY_SUB2API_SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS:-}
+      - UPDATE_PROXY_URL=${MY_SUB2API_UPDATE_PROXY_URL:-}
+
+      - GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${MY_SUB2API_GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}
+      - GATEWAY_OPENAI_HTTP2_ENABLED=${MY_SUB2API_GATEWAY_OPENAI_HTTP2_ENABLED:-true}
+      - GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${MY_SUB2API_GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}
+      - GATEWAY_OPENAI_HTTP2_FALLBACK_ERROR_THRESHOLD=${MY_SUB2API_GATEWAY_OPENAI_HTTP2_FALLBACK_ERROR_THRESHOLD:-2}
+      - GATEWAY_OPENAI_HTTP2_FALLBACK_WINDOW_SECONDS=${MY_SUB2API_GATEWAY_OPENAI_HTTP2_FALLBACK_WINDOW_SECONDS:-60}
+      - GATEWAY_OPENAI_HTTP2_FALLBACK_TTL_SECONDS=${MY_SUB2API_GATEWAY_OPENAI_HTTP2_FALLBACK_TTL_SECONDS:-600}
+      - GATEWAY_IMAGE_STREAM_DATA_INTERVAL_TIMEOUT=${MY_SUB2API_GATEWAY_IMAGE_STREAM_DATA_INTERVAL_TIMEOUT:-900}
+      - GATEWAY_IMAGE_STREAM_KEEPALIVE_INTERVAL=${MY_SUB2API_GATEWAY_IMAGE_STREAM_KEEPALIVE_INTERVAL:-10}
+      - GATEWAY_IMAGE_CONCURRENCY_ENABLED=${MY_SUB2API_GATEWAY_IMAGE_CONCURRENCY_ENABLED:-false}
+      - GATEWAY_IMAGE_CONCURRENCY_MAX_CONCURRENT_REQUESTS=${MY_SUB2API_GATEWAY_IMAGE_CONCURRENCY_MAX_CONCURRENT_REQUESTS:-0}
+      - GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE=${MY_SUB2API_GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE:-reject}
+      - GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS=${MY_SUB2API_GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS:-30}
+      - GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS=${MY_SUB2API_GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS:-100}
+    depends_on:
+      my-sub2api-postgres:
+        condition: service_healthy
+      my-sub2api-redis:
+        condition: service_healthy
+    networks:
+      - my-sub2api-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  my-sub2api-postgres:
+    image: postgres:18-alpine
+    container_name: my-sub2api-postgres
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    volumes:
+      - ./my-postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${MY_SUB2API_POSTGRES_USER:-my_sub2api}
+      - POSTGRES_PASSWORD=${MY_SUB2API_POSTGRES_PASSWORD:?MY_SUB2API_POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${MY_SUB2API_POSTGRES_DB:-my_sub2api}
+      - PGDATA=/var/lib/postgresql/data
+      - TZ=${MY_SUB2API_TZ:-Asia/Shanghai}
+    networks:
+      - my-sub2api-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MY_SUB2API_POSTGRES_USER:-my_sub2api} -d ${MY_SUB2API_POSTGRES_DB:-my_sub2api}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  my-sub2api-redis:
+    image: redis:8-alpine
+    container_name: my-sub2api-redis
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    volumes:
+      - ./my-redis-data:/data
+    command: >
+      sh -c '
+        redis-server
+        --save 60 1
+        --appendonly yes
+        --appendfsync everysec
+        ${MY_SUB2API_REDIS_PASSWORD:+--requirepass "$MY_SUB2API_REDIS_PASSWORD"}'
+    environment:
+      - TZ=${MY_SUB2API_TZ:-Asia/Shanghai}
+      - REDISCLI_AUTH=${MY_SUB2API_REDIS_PASSWORD:-}
+    networks:
+      - my-sub2api-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+networks:
+  my-sub2api-network:
+    name: my-sub2api-network
+    driver: bridge
