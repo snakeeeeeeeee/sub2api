@@ -1,0 +1,18 @@
+## Progress
+- Started implementation from approved plan.
+- Added backend upstream header template helper and unit tests.
+- Wired helper into Anthropic, OpenAI, Gemini, and Antigravity upstream request builders.
+- Added backend builder-level tests for template headers reaching representative upstream requests.
+- Added frontend UpstreamHeadersEditor and integrated it into create/edit account modals.
+- Updated deploy/docker-compose.dev.yml with SUB2API_DEV_IMAGE tag support.
+- Installed frontend dependencies with `pnpm --dir frontend install --frozen-lockfile`; lockfile stayed unchanged.
+- Added EditAccountModal tests for upstream header template echo/submit and removal cleanup.
+- Fixed golangci-lint errcheck findings in the template renderer by explicitly ignoring `strings.Builder.WriteString` errors.
+- Verified backend targeted tests: `go test ./internal/service -run 'TestApplyAccountUpstreamHeaders|TestUpstreamHeaderTemplatesReach'`.
+- Verified full backend tests: `go test ./...`.
+- Verified lint with the CI version: `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0 run ./...` returned 0 issues.
+- `make test-backend` cannot complete with a locally `go install`-built golangci-lint binary because that binary reports it was built with Go 1.25.1, lower than the repo target Go 1.26.4; direct `go run` lint passes.
+- Verified frontend typecheck: `pnpm --dir frontend run typecheck`.
+- Verified frontend tests: `pnpm --dir frontend exec vitest run src/components/account/__tests__/UpstreamHeadersEditor.spec.ts src/components/account/__tests__/EditAccountModal.spec.ts`.
+- Verified compose variable rendering: `SUB2API_DEV_IMAGE=sub2api:header-template-dev` appears under `services.sub2api.image` in `docker compose config`.
+- Docker compose build with `POSTGRES_PASSWORD=dev-password SUB2API_DEV_IMAGE=sub2api:header-template-dev` reached Docker Hub metadata fetch, then failed on auth token timeout before project build.
